@@ -1,4 +1,4 @@
-# Resumen
+# Acta
 
 Micro-SaaS que convierte la grabación de una reunión en **tareas, decisiones y correos de seguimiento**, redactados para un sector concreto (de serie: agencias inmobiliarias en España). Pensado para que el seguimiento completo cueste menos de tres minutos de atención.
 
@@ -38,7 +38,7 @@ Micro-SaaS que convierte la grabación de una reunión en **tareas, decisiones y
 | `RESEND_API_KEY`, `EMAIL_FROM` | Enviar correos desde la app y avisos de «tu reunión está lista». |
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_ID` | Plan Pro. |
 | `CRON_SECRET` | Protege el cron de retención. |
-| `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_PRODUCT_NAME` | URL pública y nombre del producto (provisional: Resumen). |
+| `NEXT_PUBLIC_APP_URL`, `NEXT_PUBLIC_PRODUCT_NAME` | URL pública y nombre del producto (por defecto: Acta). |
 
 ## Coste por reunión (una hora de audio)
 

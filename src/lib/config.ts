@@ -1,8 +1,8 @@
 /**
  * Variables del producto (sección 0 del prompt).
- * El nombre es provisional hasta que se elija uno de los tres propuestos en PLAN.md.
+ * Nombre elegido: Acta (ver PLAN.md). Se puede sobrescribir con NEXT_PUBLIC_PRODUCT_NAME.
  */
-export const PRODUCT_NAME = process.env.NEXT_PUBLIC_PRODUCT_NAME ?? "Resumen";
+export const PRODUCT_NAME = process.env.NEXT_PUBLIC_PRODUCT_NAME ?? "Acta";
 
 export const SECTOR = "Agencias inmobiliarias (compraventa y alquiler residencial, España)";
 

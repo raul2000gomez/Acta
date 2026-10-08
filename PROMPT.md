@@ -8,7 +8,7 @@
 
 ```
 SECTOR            = Agencias inmobiliarias (compraventa y alquiler residencial, España)
-NOMBRE_PRODUCTO   = (propón 3 nombres cortos en español y elijo yo; usa "Resumen" como provisional)
+NOMBRE_PRODUCTO   = Acta
 IDIOMA_UI         = Español de España
 IDIOMAS_AUDIO     = español, catalán, inglés (detección automática)
 USUARIO_TIPO      = Comercial o gerente de oficina, 30-60 años, usa el móvil tanto como el portátil y no quiere aprender ninguna herramienta nueva

@@ -2,7 +2,7 @@
 
 ## Nombre
 
-Propuestas (elige una; mientras tanto el código usa **Resumen** como provisional):
+Elegido: **Acta**. Las tres propuestas fueron:
 
 1. **Quedamos** — «Quedamos en que…» es literalmente la primera frase de todo correo de seguimiento. Memorable, muy español, dominio `quedamos.app`.
 2. **Acta** — corto, serio, conocido por cualquier gerente. Transmite «esto queda por escrito».

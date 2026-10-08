@@ -1,6 +1,6 @@
 {
-  "name": "Resumen",
-  "short_name": "Resumen",
+  "name": "Acta",
+  "short_name": "Acta",
   "description": "De la grabación de la reunión a las tareas, las decisiones y los correos de seguimiento.",
   "id": "/app",
   "start_url": "/app",
