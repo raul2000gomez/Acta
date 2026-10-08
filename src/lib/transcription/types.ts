@@ -1,8 +1,10 @@
 import type { Transcript } from "@/lib/supabase/types";
 
 export type TranscribeInput = {
-  /** URL firmada desde la que el proveedor descarga el audio. */
-  url: string;
+  /** URL firmada desde la que el proveedor descarga el audio (la app siempre usa esta vía). */
+  url?: string;
+  /** Alternativa a `url`: el audio en memoria. Lo usa la prueba sin app (`smoke:real -- --sin-app`). */
+  bytes?: Uint8Array;
   mime?: string | null;
   /** Pista de idioma (es, ca, en) si se conoce. */
   languageHint?: string | null;

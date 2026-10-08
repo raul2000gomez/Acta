@@ -29,14 +29,35 @@ Micro-SaaS que convierte la grabación de una reunión en **tareas, decisiones y
 
 ## Prueba con audio real (un comando)
 
-Con la app arrancada y las claves en `.env.local`:
+Con las claves en `.env.local` (o en el entorno):
 
 ```bash
-npm run smoke:real                      # sintetiza la reunión de ejemplo con voces reales y la procesa
-npm run smoke:real -- --audio mi.m4a    # o usa tu propia grabación
+npm run smoke:real                      # por la app: necesita la app arrancada y Supabase
+npm run smoke:real -- --sin-app         # el motor directo (Deepgram → Claude), sin app ni Supabase
+npm run smoke:real -- --audio mi.m4a    # usa tu propia grabación (vale con los dos modos)
 ```
 
-El script sintetiza cada intervención con una voz distinta de Deepgram (una por hablante), las une con ffmpeg, crea la reunión por la misma API que usa el navegador (sesión anónima, URL firmada, arranque), espera a que esté lista y vuelca tareas, decisiones, correos, dudas, tiempos por fase, minutos por hora de audio, porcentaje de tareas con responsable y coste de la extracción. Necesita `ffmpeg` en el PATH. Las voces se pueden forzar con `TTS_VOICES="voz1,voz2,voz3"`.
+El script sintetiza cada intervención de la reunión de ejemplo con una voz distinta de Deepgram (una por hablante), las une con ffmpeg y guarda el guion con los tiempos reales. Después:
+
+- **Por la app** (por defecto) crea la reunión por la misma API que usa el navegador (sesión anónima, URL firmada, arranque), espera a que esté lista y vuelca tareas, decisiones, correos, dudas, tiempos por fase, minutos por hora de audio, porcentaje de tareas con responsable y coste de la extracción.
+- **`--sin-app`** ejecuta los módulos de `src/lib` directamente desde Node (Deepgram con el audio en el cuerpo de la petición y la extracción con Claude), sin servidor ni base de datos. Imprime el mismo informe más la comparación con el guion: tasa de error por palabra (con y sin cifras) y acierto de la diarización. Sin `ANTHROPIC_API_KEY` mide solo la transcripción y sale con código 3 (prueba parcial). Es el modo para CI y para entornos sin Supabase.
+
+Necesita `ffmpeg` en el PATH. Las voces se pueden forzar con `TTS_VOICES="voz1,voz2,voz3"`. El audio y el guion quedan en `scratch/` (ignorado por git); con `--sin-app` también `scratch/ultima-extraccion.json`. Códigos de salida: 0 todo bien, 1 error, 2 la reunión falló, 3 parcial.
+
+### Última medida (8 oct 2026, `--sin-app`)
+
+Reunión de ejemplo sintetizada: 3 voces, 25 intervenciones, 2 min 58 s, 1,2 MB de MP3.
+
+| Medida | Resultado |
+|---|---|
+| Transcripción (Deepgram nova-3, diarización + detección de idioma) | 1,0 s · idioma `es` · 25 intervenciones, las mismas que el guion |
+| Hablantes | 3 de 3 detectados · 100 % del habla asignada al hablante correcto |
+| Error por palabra | 11,7 % en bruto (casi todo «trescientos cinco mil» → «305000») · 2,5 % sin cifras (10 de 401: «garaje»→«garage», «lo»→«no» ×2, «IBI»→«EBI» ×2, «son»→«solo», «la»→«una» y tres «y» de cantidades) |
+| Minutos por hora de audio (solo transcripción) | 0,4 (objetivo total < 2) |
+| Extracción con Claude | Pendiente: el entorno de la prueba no tenía `ANTHROPIC_API_KEY`. El mismo comando la mide en cuanto esté la clave. |
+| Por la app | Pendiente: hace falta un proyecto de Supabase real en las variables del entorno (la prueba por la app fallaba en la sesión anónima con la URL de ejemplo). |
+
+Lecturas: la diarización es sólida con voces distintas y 0,6 s de silencio entre turnos; lo que falla son términos del sector («IBI») y confusiones «lo/no», que el extractor debe leer con el contexto. Las cifras llegan al modelo como números, que es lo que queremos para precios y plazos.
 
 ## Variables de entorno
 
@@ -97,7 +118,7 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 |---|---|
 | Comercial con prisa: subir y enviar un correo en < 3 min sin instrucciones | Diseñado para ello; falta la prueba con una persona real del sector. |
 | Cero campos obligatorios antes del resultado | Cumplido. Solo el campo opcional «¿De qué va?». |
-| < 2 min por hora de audio | Depende de Deepgram y Claude; la estimación en pantalla es honesta y se mide por fases. Sin claves no se ha podido medir. |
+| < 2 min por hora de audio | Transcripción medida: 0,4 min por hora (ver «Última medida»). La extracción se mide con el mismo comando cuando haya `ANTHROPIC_API_KEY`. |
 | ≥ 80 % de tareas con responsable, ≥ 70 % de correos sin editar | Se mide (`edits_count`, `emails.sent_unchanged`); sin datos reales todavía. |
 | Cada tarea y decisión con cita y minuto, reproducible | Cumplido (con audio real). |
 | Móvil: grabar, subir y enviar sin pellizcar; Lighthouse ≥ 90 | Diseñado móvil primero; Lighthouse pendiente de medir en despliegue. |
@@ -108,6 +129,6 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 ## Pendiente
 
 - Vídeo de 20 segundos del flujo real en la landing (hoy hay tres pasos ilustrados) y frases de prueba social reales.
-- Ejecutar `npm run smoke:real` con claves reales y ajustar la estimación de tiempo con las medidas que imprime.
+- Ejecutar `npm run smoke:real -- --sin-app` con `ANTHROPIC_API_KEY` para medir la extracción (tiempo, coste, % de tareas con responsable), y `npm run smoke:real` por la app con un Supabase real; después ajustar `estimateProcessingSeconds` con las medidas.
 - Reunión de ejemplo con grabación real.
 - Equipo e integraciones de calendario (solo .ics en v1).

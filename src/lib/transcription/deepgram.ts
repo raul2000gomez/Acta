@@ -12,7 +12,8 @@ type DeepgramResponse = {
 };
 
 /**
- * Deepgram por URL: el servicio descarga el audio desde la URL firmada de Storage.
+ * Deepgram por URL (el servicio descarga el audio desde la URL firmada de Storage)
+ * o con el audio en el cuerpo de la petición (prueba sin app).
  * nova-3 cubre español, catalán e inglés; detect_language elige el dominante.
  */
 export const deepgramProvider: TranscriptionProvider = {
@@ -31,13 +32,17 @@ export const deepgramProvider: TranscriptionProvider = {
     if (input.languageHint) params.set("language", input.languageHint);
     else params.set("detect_language", "true");
 
+    if (!input.bytes && !input.url) {
+      throw new TranscriptionError("No hay audio que transcribir (ni URL ni bytes).", false);
+    }
+    // Por URL (la app: Deepgram descarga desde Storage) o con el audio en el cuerpo (prueba sin app).
     const res = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
       method: "POST",
       headers: {
         Authorization: `Token ${env.deepgramApiKey}`,
-        "Content-Type": "application/json",
+        "Content-Type": input.bytes ? (input.mime ?? "application/octet-stream") : "application/json",
       },
-      body: JSON.stringify({ url: input.url }),
+      body: input.bytes ? new Uint8Array(input.bytes) : JSON.stringify({ url: input.url }),
     });
 
     if (!res.ok) {
