@@ -26,6 +26,18 @@ Micro-SaaS que convierte la grabación de una reunión en **tareas, decisiones y
 - El cron de `vercel.json` llama a `/api/cron/retention` cada noche con `CRON_SECRET` para borrar el audio caducado.
 - En Supabase › Authentication › URL Configuration añade `https://tudominio/auth/callback` a *Redirect URLs*.
 
+
+## Prueba con audio real (un comando)
+
+Con la app arrancada y las claves en `.env.local`:
+
+```bash
+npm run smoke:real                      # sintetiza la reunión de ejemplo con voces reales y la procesa
+npm run smoke:real -- --audio mi.m4a    # o usa tu propia grabación
+```
+
+El script sintetiza cada intervención con una voz distinta de Deepgram (una por hablante), las une con ffmpeg, crea la reunión por la misma API que usa el navegador (sesión anónima, URL firmada, arranque), espera a que esté lista y vuelca tareas, decisiones, correos, dudas, tiempos por fase, minutos por hora de audio, porcentaje de tareas con responsable y coste de la extracción. Necesita `ffmpeg` en el PATH. Las voces se pueden forzar con `TTS_VOICES="voz1,voz2,voz3"`.
+
 ## Variables de entorno
 
 | Variable | Para qué |
@@ -96,6 +108,6 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 ## Pendiente
 
 - Vídeo de 20 segundos del flujo real en la landing (hoy hay tres pasos ilustrados) y frases de prueba social reales.
-- Probar de punta a punta con claves reales de Deepgram y Claude y ajustar la estimación de tiempo.
+- Ejecutar `npm run smoke:real` con claves reales y ajustar la estimación de tiempo con las medidas que imprime.
 - Reunión de ejemplo con grabación real.
 - Equipo e integraciones de calendario (solo .ics en v1).

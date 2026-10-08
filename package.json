@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "smoke:real": "node scripts/smoke-real.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

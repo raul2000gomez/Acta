@@ -42,3 +42,6 @@ next-env.d.ts
 
 # Plantilla de variables: sí se versiona
 !.env.example
+
+# Audio sintetizado y temporales de la prueba real
+/scratch
