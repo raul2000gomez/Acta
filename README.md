@@ -44,20 +44,23 @@ El script sintetiza cada intervención de la reunión de ejemplo con una voz dis
 
 Necesita `ffmpeg` en el PATH. Las voces se pueden forzar con `TTS_VOICES="voz1,voz2,voz3"`. El audio y el guion quedan en `scratch/` (ignorado por git); con `--sin-app` también `scratch/ultima-extraccion.json`. Códigos de salida: 0 todo bien, 1 error, 2 la reunión falló, 3 parcial.
 
-### Última medida (8 oct 2026, `--sin-app`)
+### Última medida (9 oct 2026, `--sin-app`, sesión en la nube)
 
-Reunión de ejemplo sintetizada: 3 voces, 25 intervenciones, 2 min 58 s, 1,2 MB de MP3.
+Reunión de ejemplo sintetizada: 3 voces (`aura-2-celeste-es`, `aura-2-diana-es`, `aura-2-sirio-es`), 25 intervenciones, 2 min 54 s, 1,2 MB de MP3.
 
 | Medida | Resultado |
 |---|---|
 | Transcripción (Deepgram nova-3, diarización + detección de idioma) | 1,0 s · idioma `es` · 25 intervenciones, las mismas que el guion |
-| Hablantes | 3 de 3 detectados · 100 % del habla asignada al hablante correcto |
-| Error por palabra | 11,7 % en bruto (casi todo «trescientos cinco mil» → «305000») · 2,5 % sin cifras (10 de 401: «garaje»→«garage», «lo»→«no» ×2, «IBI»→«EBI» ×2, «son»→«solo», «la»→«una» y tres «y» de cantidades) |
-| Minutos por hora de audio (solo transcripción) | 0,4 (objetivo total < 2) |
-| Extracción con Claude | Pendiente: el entorno de la prueba no tenía `ANTHROPIC_API_KEY`. El mismo comando la mide en cuanto esté la clave. |
-| Por la app | Pendiente: hace falta un proyecto de Supabase real en las variables del entorno (la prueba por la app fallaba en la sesión anónima con la URL de ejemplo). |
+| Hablantes | 3 de 3 detectados · 99,3 % del habla asignada al hablante correcto |
+| Error por palabra | 11,7 % en bruto (casi todo cifras: «trescientos cinco mil» → «305000») · 2,5 % sin cifras (10 de 401) con el vocabulario del sector como `keyterm`; 3,0 % sin él |
+| Fallos reales | «lo entiendo» → «no entiendo», «que le eche un ojo» → «que haya hecho 1», «junto» → «junta». «IBI» → «IVI» desapareció al añadir el vocabulario del sector |
+| Minutos por hora de audio (solo transcripción) | 0,3–0,4 (objetivo total < 2) |
+| Extracción con Claude | Pendiente: el entorno no tenía `ANTHROPIC_API_KEY`. El mismo comando la mide en cuanto esté la clave. |
+| Por la app | Pendiente: `NEXT_PUBLIC_SUPABASE_URL` del entorno era la URL de ejemplo de la guía, no un proyecto real. |
 
-Lecturas: la diarización es sólida con voces distintas y 0,6 s de silencio entre turnos; lo que falla son términos del sector («IBI») y confusiones «lo/no», que el extractor debe leer con el contexto. Las cifras llegan al modelo como números, que es lo que queremos para precios y plazos.
+Lecturas: la diarización es sólida con voces distintas y 0,6 s de silencio entre turnos. Los términos del sector se corrigen con `keyterm` (`src/lib/transcription/keyterms.ts`); quedan confusiones «lo/no» y cifras abreviadas («salimos en 305» por 305.000 €), y para eso el system prompt le dice al extractor cómo leer cifras abreviadas y que lleve a dudas lo que sea ambiguo por un error de transcripción. Las cifras llegan al modelo como números, que es lo que queremos para precios y plazos.
+
+En una sesión de Claude Code en la nube, el `fetch` de Node no usa el proxy del entorno por sí solo: ejecuta `NODE_USE_ENV_PROXY=1 npm run smoke:real -- --sin-app`. En un ordenador normal no hace falta.
 
 ## Variables de entorno
 
@@ -110,6 +113,7 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 - **Un solo plan de pago** (Pro). El plan Equipo de las variables queda para cuando exista la función de equipo.
 - **Equipo (invitar por email)** aplazado a la siguiente versión; en Ajustes se dice tal cual.
 - **La reunión de ejemplo no tiene audio** (no se puede sintetizar aquí una voz real); las citas se muestran pero no se reproducen. Con una grabación real todo el flujo de evidencia funciona.
+- **Vocabulario del sector en la transcripción**: nova-3 recibe los términos de `keyterms.ts` como `keyterm`; si un modelo o idioma no lo admite, se repite la petición sin ellos. `DEEPGRAM_KEYTERMS=off` lo desactiva.
 - **Fallbacks de refusal de la API de Claude** no activados (es una cabecera beta que no se ha podido probar aquí); un rechazo del modelo marca la reunión como fallida con el motivo.
 
 ## Repaso contra la sección 11 del prompt

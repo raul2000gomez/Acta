@@ -1,6 +1,7 @@
 import { env } from "@/lib/env";
 import type { Transcript, TranscriptSegment } from "@/lib/supabase/types";
 import { TranscriptionError, type TranscribeInput, type TranscriptionProvider } from "./types";
+import { SECTOR_KEYTERMS } from "./keyterms";
 
 type DeepgramUtterance = { start: number; end: number; transcript: string; speaker?: number };
 type DeepgramResponse = {
@@ -35,15 +36,30 @@ export const deepgramProvider: TranscriptionProvider = {
     if (!input.bytes && !input.url) {
       throw new TranscriptionError("No hay audio que transcribir (ni URL ni bytes).", false);
     }
+    // Vocabulario del sector (keyterm): mejora términos como «IBI» o «arras». Desactivable con DEEPGRAM_KEYTERMS=off.
+    const useKeyterms = process.env.DEEPGRAM_KEYTERMS !== "off";
+    if (useKeyterms) for (const term of SECTOR_KEYTERMS) params.append("keyterm", term);
+
     // Por URL (la app: Deepgram descarga desde Storage) o con el audio en el cuerpo (prueba sin app).
-    const res = await fetch(`https://api.deepgram.com/v1/listen?${params.toString()}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Token ${env.deepgramApiKey}`,
-        "Content-Type": input.bytes ? (input.mime ?? "application/octet-stream") : "application/json",
-      },
-      body: input.bytes ? new Uint8Array(input.bytes) : JSON.stringify({ url: input.url }),
-    });
+    const request = (p: URLSearchParams) =>
+      fetch(`https://api.deepgram.com/v1/listen?${p.toString()}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Token ${env.deepgramApiKey}`,
+          "Content-Type": input.bytes ? (input.mime ?? "application/octet-stream") : "application/json",
+        },
+        body: input.bytes ? new Uint8Array(input.bytes) : JSON.stringify({ url: input.url }),
+      });
+
+    let res = await request(params);
+    if (res.status === 400 && useKeyterms) {
+      // Si este modelo o idioma no admite keyterm, se repite sin vocabulario en vez de fallar.
+      const detail = await res.clone().text();
+      if (/keyterm/i.test(detail)) {
+        params.delete("keyterm");
+        res = await request(params);
+      }
+    }
 
     if (!res.ok) {
       const text = (await res.text()).slice(0, 400);

@@ -26,7 +26,9 @@ Reglas, por orden de importancia:
 11. Idioma: tareas, decisiones y resumen en el idioma del usuario; cada correo en el idioma en que ese destinatario habló en la reunión.
 12. Si la transcripción es muy corta, ininteligible o no es una reunión, descríbelo en quality_warning y devuelve las listas vacías. No rellenes por rellenar.
 13. Nombres: usa los del contexto cuando coincidan con la voz o el papel del hablante. Si no puedes identificar a alguien, deja name null y describe su papel en role («comprador», «gestoría»).
-14. Identificadores: los participantes se llaman spk_1, spk_2… en el orden de la transcripción; las tareas t1, t2…; las decisiones d1, d2…; los correos e1, e2…. Los campos owner_id, decided_by, to_participant_id y related_task_ids usan exactamente esos identificadores.
+14. Cifras: la transcripción escribe las cantidades como números y a veces abreviadas («salimos en 305», «ofrecen 290»). En contexto de precio de vivienda, una cifra de dos o tres dígitos significa miles de euros (305 = 305.000 €); escribe siempre la cantidad completa con su unidad. Si no está claro, llévalo a open_questions.
+15. Errores de transcripción: la transcripción automática confunde palabras parecidas («lo» por «no», «IBI» por «IVI», «arras» por «harás»). Lee con el contexto y el vocabulario del sector; si una frase clave es ambigua por esto, no la conviertas en decisión: ponla en open_questions.
+16. Identificadores: los participantes se llaman spk_1, spk_2… en el orden de la transcripción; las tareas t1, t2…; las decisiones d1, d2…; los correos e1, e2…. Los campos owner_id, decided_by, to_participant_id y related_task_ids usan exactamente esos identificadores.
 
 ${SECTOR_BLOCK}`;
 

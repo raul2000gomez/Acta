@@ -115,13 +115,28 @@ if (process.env.TTS_VOICES) {
 async function speak(text, voices) {
   let lastErr = "";
   for (const model of voices) {
-    const res = await fetch(`https://api.deepgram.com/v1/speak?model=${model}&encoding=linear16&sample_rate=24000&container=wav`, {
-      method: "POST",
-      headers: { Authorization: `Token ${DG}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (res.ok) return { model, audio: Buffer.from(await res.arrayBuffer()) };
-    lastErr = `${model}: ${res.status} ${(await res.text()).slice(0, 200)}`;
+    // Hasta tres intentos por voz: los cortes de red puntuales no deben tirar la síntesis entera.
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let res;
+      try {
+        res = await fetch(`https://api.deepgram.com/v1/speak?model=${model}&encoding=linear16&sample_rate=24000&container=wav`, {
+          method: "POST",
+          headers: { Authorization: `Token ${DG}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+      } catch (err) {
+        lastErr = `${model}: ${err.message}`;
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+        continue;
+      }
+      if (res.ok) return { model, audio: Buffer.from(await res.arrayBuffer()) };
+      lastErr = `${model}: ${res.status} ${(await res.text()).slice(0, 200)}`;
+      if (res.status === 429 || res.status >= 500) {
+        await new Promise((r) => setTimeout(r, attempt * 1500));
+        continue;
+      }
+      break; // 4xx distinto de 429: la voz no vale, probar la siguiente
+    }
   }
   throw new Error(`Ninguna voz válida. Último error: ${lastErr}`);
 }
@@ -151,17 +166,22 @@ async function synthesizeMeeting(outDir) {
     }
   }
   log("Sintetizando la reunión de ejemplo con voces de Deepgram…");
-  const chosen = {};
+  const vocesFile = resolve(outDir, "voces.json");
+  const chosen = existsSync(vocesFile) ? JSON.parse(readFileSync(vocesFile, "utf8")) : {};
   const parts = [];
   const reference = [];
   let cursor = 0;
   for (let i = 0; i < SEGMENTS.length; i++) {
     const [spk, text] = SEGMENTS[i];
-    const voices = chosen[spk] ? [chosen[spk]] : VOICE_CANDIDATES[spk];
-    const { model, audio } = await speak(text, voices);
-    chosen[spk] = model;
     const file = resolve(outDir, `seg-${String(i).padStart(2, "0")}.wav`);
-    writeFileSync(file, audio);
+    // Los segmentos ya sintetizados se reutilizan: si una ejecución se corta, la siguiente continúa.
+    if (!existsSync(file) || !chosen[spk]) {
+      const voices = chosen[spk] ? [chosen[spk]] : VOICE_CANDIDATES[spk];
+      const { model, audio } = await speak(text, voices);
+      chosen[spk] = model;
+      writeFileSync(file, audio);
+      writeFileSync(vocesFile, JSON.stringify(chosen));
+    }
     parts.push(file);
     const dur = probeDuration(file) ?? 0;
     reference.push({ speaker: spk, start: cursor, end: cursor + dur, text });
