@@ -17,17 +17,47 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
   const meetingId = meeting.id;
   const userId = meeting.user_id;
 
-  for (const table of ["emails", "tasks", "decisions", "open_questions", "participants"] as const) {
-    const { error } = await admin.from(table).delete().eq("meeting_id", meetingId);
-    if (error) throw new Error(`No se pudo limpiar ${table}: ${error.message}`);
+  // Cada llamada a Supabase es un viaje de red; se agrupan y se lanzan en paralelo donde no dependen entre sí.
+  const children = ["emails", "tasks", "decisions", "open_questions"] as const;
+  const [cleanups, { data: contacts }] = await Promise.all([
+    Promise.all(children.map((table) => admin.from(table).delete().eq("meeting_id", meetingId))),
+    admin.from("contacts").select("id, name, email, role").eq("user_id", userId),
+  ]);
+  cleanups.forEach(({ error }, i) => {
+    if (error) throw new Error(`No se pudo limpiar ${children[i]}: ${error.message}`);
+  });
+  {
+    const { error } = await admin.from("participants").delete().eq("meeting_id", meetingId);
+    if (error) throw new Error(`No se pudo limpiar participants: ${error.message}`);
   }
 
   // Participantes: los que dice la IA más cualquier hablante de la transcripción que haya olvidado.
   const speakerKeys = new Set<string>(extraction.participants.map((p) => p.id));
   for (const seg of transcript?.segments ?? []) speakerKeys.add(seg.speaker);
 
-  const { data: contacts } = await admin.from("contacts").select("id, name, email, role").eq("user_id", userId);
   const contactByName = new Map((contacts ?? []).map((c) => [normalizeName(c.name), c]));
+
+  // Memoria de nombres (regla 12): quien aparece con nombre y no es el usuario, se recuerda.
+  // Se crean antes que los participantes para enlazarlos en la misma inserción.
+  const remembered = extraction.participants.filter((p) => p.name && !p.is_user);
+  const newContacts = new Map<string, { user_id: string; name: string; role: string | null }>();
+  const roleUpdates: { id: string; role: string }[] = [];
+  for (const p of remembered) {
+    const key = normalizeName(p.name!);
+    const existing = contactByName.get(key);
+    if (existing) {
+      if (!existing.role && p.role) roleUpdates.push({ id: existing.id, role: p.role });
+    } else if (!newContacts.has(key)) {
+      newContacts.set(key, { user_id: userId, name: p.name!.trim(), role: p.role ?? null });
+    }
+  }
+  const [created] = await Promise.all([
+    newContacts.size
+      ? admin.from("contacts").insert(Array.from(newContacts.values())).select("id, name, email, role")
+      : Promise.resolve({ data: [] as { id: string; name: string; email: string | null; role: string | null }[] }),
+    ...roleUpdates.map((u) => admin.from("contacts").update({ role: u.role }).eq("id", u.id)),
+  ]);
+  for (const c of created.data ?? []) contactByName.set(normalizeName(c.name), c);
 
   const participantRows = Array.from(speakerKeys).map((key) => {
     const p = extraction.participants.find((x) => x.id === key);
@@ -47,30 +77,7 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
   if (pErr) throw new Error(`No se pudieron guardar los participantes: ${pErr.message}`);
   const participantId = new Map((participants ?? []).map((p) => [p.speaker_key, p.id]));
 
-  // Memoria de nombres (regla 12): quien aparece con nombre y no es el usuario, se recuerda.
-  for (const p of extraction.participants) {
-    if (!p.name || p.is_user) continue;
-    const existing = contactByName.get(normalizeName(p.name));
-    if (existing) {
-      await admin
-        .from("contacts")
-        .update({ role: existing.role ?? p.role ?? null })
-        .eq("id", existing.id);
-    } else {
-      const { data: created } = await admin
-        .from("contacts")
-        .insert({ user_id: userId, name: p.name.trim(), role: p.role ?? null })
-        .select("id, name, email, role")
-        .single();
-      if (created) {
-        contactByName.set(normalizeName(created.name), created);
-        const pid = participantId.get(p.id);
-        if (pid) await admin.from("participants").update({ contact_id: created.id }).eq("id", pid);
-      }
-    }
-  }
-
-  // Tareas
+  // Tareas (primero: los correos enlazan sus ids)
   const taskRows = extraction.tasks.map((t, i) => ({
     meeting_id: meetingId,
     user_id: userId,
@@ -94,9 +101,11 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
     if (ai) taskIdByAi.set(ai.id, row.id);
   });
 
-  // Decisiones
+  // Decisiones, correos y dudas no dependen entre sí: en paralelo.
+  const writes: PromiseLike<{ error: { message: string } | null }>[] = [];
+  const label = ["las decisiones", "los correos", "las dudas"];
   if (extraction.decisions.length) {
-    const { error } = await admin.from("decisions").insert(
+    writes.push(admin.from("decisions").insert(
       extraction.decisions.map((d, i) => ({
         meeting_id: meetingId,
         user_id: userId,
@@ -107,13 +116,11 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
         evidence_ts: d.evidence.timestamp,
         position: i,
       })),
-    );
-    if (error) throw new Error(`No se pudieron guardar las decisiones: ${error.message}`);
-  }
+    ));
+  } else writes.push(Promise.resolve({ error: null }));
 
-  // Correos
   if (extraction.emails.length) {
-    const { error } = await admin.from("emails").insert(
+    writes.push(admin.from("emails").insert(
       extraction.emails.map((e, i) => {
         const participant = e.to_participant_id ? extraction.participants.find((p) => p.id === e.to_participant_id) : null;
         const contact = participant?.name ? contactByName.get(normalizeName(participant.name)) : undefined;
@@ -131,13 +138,11 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
           position: i,
         };
       }),
-    );
-    if (error) throw new Error(`No se pudieron guardar los correos: ${error.message}`);
-  }
+    ));
+  } else writes.push(Promise.resolve({ error: null }));
 
-  // Dudas
   if (extraction.open_questions.length) {
-    const { error } = await admin.from("open_questions").insert(
+    writes.push(admin.from("open_questions").insert(
       extraction.open_questions.map((q, i) => ({
         meeting_id: meetingId,
         user_id: userId,
@@ -146,7 +151,11 @@ export async function persistExtraction(admin: Admin, meeting: Meeting, extracti
         evidence_ts: q.evidence.timestamp,
         position: i,
       })),
-    );
-    if (error) throw new Error(`No se pudieron guardar las dudas: ${error.message}`);
-  }
+    ));
+  } else writes.push(Promise.resolve({ error: null }));
+
+  const results = await Promise.all(writes);
+  results.forEach(({ error }, i) => {
+    if (error) throw new Error(`No se pudieron guardar ${label[i]}: ${error.message}`);
+  });
 }

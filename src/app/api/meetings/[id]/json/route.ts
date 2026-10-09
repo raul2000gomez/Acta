@@ -10,6 +10,6 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
   if (!bundle) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
   const { transcript, raw_extraction, ...meeting } = bundle.meeting;
   void transcript;
-  void raw_extraction;
-  return NextResponse.json({ ...bundle, meeting }, { headers: { "Cache-Control": "no-store" } });
+  const extraction_model = (raw_extraction as { model?: string } | null)?.model ?? null;
+  return NextResponse.json({ ...bundle, meeting: { ...meeting, extraction_model } }, { headers: { "Cache-Control": "no-store" } });
 }

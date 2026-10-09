@@ -59,11 +59,14 @@ if (SIN_APP && !process.execArgv.includes("--conditions=react-server")) {
   process.exit(r.status ?? 1);
 }
 
-const required = SIN_APP ? ["DEEPGRAM_API_KEY"] : ["NEXT_PUBLIC_SUPABASE_URL", "DEEPGRAM_API_KEY", "ANTHROPIC_API_KEY"];
+const required = SIN_APP ? ["DEEPGRAM_API_KEY"] : ["NEXT_PUBLIC_SUPABASE_URL", "DEEPGRAM_API_KEY"];
 const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
   console.error(`Faltan variables: ${missing.join(", ")} (en .env.local o en el entorno).`);
   process.exit(1);
+}
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.log("⚠ Sin ANTHROPIC_API_KEY en este entorno: se mide la transcripción y el recorrido; la extracción será la de demostración si la app tampoco tiene la clave.");
 }
 
 const log = (msg) => console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
@@ -431,6 +434,11 @@ async function runThroughApp({ audioPath, file, mime, durationSec }) {
       timings: { upload: tUpload - t0, transcribe: timings.transcribe, extract: timings.extract, total: tEnd - t0 },
     }),
   );
+  const model = bundle.meeting.extraction_model ?? "?";
+  console.log(`\nModelo de extracción: ${model}`);
+  if (model === "demo") {
+    console.log("⚠ La app no tiene ANTHROPIC_API_KEY: las tareas y decisiones de arriba son las de demostración, no salen del audio. Ponle la clave y repite para medir a Claude.");
+  }
   console.log(`\nAbre ${APP}/app/r/${bundle.meeting.id} con el mismo navegador que la cookie, o inicia sesión y revisa la reunión.`);
 }
 

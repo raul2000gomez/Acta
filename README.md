@@ -42,25 +42,30 @@ El script sintetiza cada intervención de la reunión de ejemplo con una voz dis
 - **Por la app** (por defecto) crea la reunión por la misma API que usa el navegador (sesión anónima, URL firmada, arranque), espera a que esté lista y vuelca tareas, decisiones, correos, dudas, tiempos por fase, minutos por hora de audio, porcentaje de tareas con responsable y coste de la extracción.
 - **`--sin-app`** ejecuta los módulos de `src/lib` directamente desde Node (Deepgram con el audio en el cuerpo de la petición y la extracción con Claude), sin servidor ni base de datos. Imprime el mismo informe más la comparación con el guion: tasa de error por palabra (con y sin cifras) y acierto de la diarización. Sin `ANTHROPIC_API_KEY` mide solo la transcripción y sale con código 3 (prueba parcial). Es el modo para CI y para entornos sin Supabase.
 
+Si la app no tiene `ANTHROPIC_API_KEY`, el recorrido por la app funciona igual pero la extracción es la de demostración: el informe termina con «Modelo de extracción: demo» y un aviso. Con la clave, la misma línea muestra el modelo de Claude y el coste real.
+
 Necesita `ffmpeg` en el PATH. Las voces se pueden forzar con `TTS_VOICES="voz1,voz2,voz3"`. El audio y el guion quedan en `scratch/` (ignorado por git); con `--sin-app` también `scratch/ultima-extraccion.json`. Códigos de salida: 0 todo bien, 1 error, 2 la reunión falló, 3 parcial.
 
-### Última medida (9 oct 2026, `--sin-app`, sesión en la nube)
+### Última medida (9 oct 2026, los dos modos, sesión en la nube)
 
-Reunión de ejemplo sintetizada: 3 voces (`aura-2-celeste-es`, `aura-2-diana-es`, `aura-2-sirio-es`), 25 intervenciones, 2 min 54 s, 1,2 MB de MP3.
+Reunión de ejemplo sintetizada: 3 voces (`aura-2-celeste-es`, `aura-2-diana-es`, `aura-2-sirio-es`), 25 intervenciones, 2 min 54 s, 1,2 MB de MP3. Supabase real (migración aplicada, inicio anónimo activado, bucket `audio` privado).
 
 | Medida | Resultado |
 |---|---|
-| Transcripción (Deepgram nova-3, diarización + detección de idioma) | 1,0 s · idioma `es` · 25 intervenciones, las mismas que el guion |
+| Transcripción (Deepgram nova-3, diarización + detección de idioma) | 1,0–2,7 s según la carga de la sesión · idioma `es` · 25 intervenciones, las mismas que el guion |
 | Hablantes | 3 de 3 detectados · 99,3 % del habla asignada al hablante correcto |
 | Error por palabra | 11,7 % en bruto (casi todo cifras: «trescientos cinco mil» → «305000») · 2,5 % sin cifras (10 de 401) con el vocabulario del sector como `keyterm`; 3,0 % sin él |
 | Fallos reales | «lo entiendo» → «no entiendo», «que le eche un ojo» → «que haya hecho 1», «junto» → «junta». «IBI» → «IVI» desapareció al añadir el vocabulario del sector |
-| Minutos por hora de audio (solo transcripción) | 0,3–0,4 (objetivo total < 2) |
-| Extracción con Claude | Pendiente: el entorno no tenía `ANTHROPIC_API_KEY`. El mismo comando la mide en cuanto esté la clave. |
-| Por la app | Pendiente: `NEXT_PUBLIC_SUPABASE_URL` del entorno era la URL de ejemplo de la guía, no un proyecto real. |
+| Minutos por hora de audio (solo transcripción) | 0,3–0,9 (objetivo total < 2) |
+| Por la app, de principio a fin | 16,6 s: sesión anónima y reunión creadas en 2 s, subida directa a Storage 3,8 s (1,2 MB a través del proxy), transcripción 2,7 s, extracción 1,4 s (demostración), guardado 2,3 s, y el resto es el sondeo de estado cada 2,5 s. Para 2 min 54 s de audio son «5,7 min por hora», pero unos 12 s son fijos y no crecen con la duración |
+| Guardado en Supabase | 4,9 s en la primera pasada: 15 llamadas en serie. Se agruparon y paralelizaron (`src/lib/pipeline/persist.ts`) y bajó a 2,3 s. En Vercel, en la misma región que Supabase, debería quedar por debajo de 1 s |
+| Lo que quedó en la base de datos | Reunión `ready` con `phase_timings`, audio en `audio/{usuario}/{reunión}.mp3` con el tamaño exacto, perfil creado por el trigger con `meetings_used = 1`, 3 participantes, 6 tareas (todas con responsable), 4 decisiones, 2 correos con destinatario y tareas enlazadas, 2 dudas, y Carmen y Pedro guardados como contactos (una vez por usuario, sin duplicados en la segunda pasada) |
+| RLS | La reunión de una sesión no se ve desde otra: `/app/r/{id}` y `/api/meetings/{id}/json` responden 404 sin la cookie que la creó |
+| Extracción con Claude | Pendiente: el entorno no tenía `ANTHROPIC_API_KEY`. Los dos comandos la miden en cuanto esté la clave. |
 
 Lecturas: la diarización es sólida con voces distintas y 0,6 s de silencio entre turnos. Los términos del sector se corrigen con `keyterm` (`src/lib/transcription/keyterms.ts`); quedan confusiones «lo/no» y cifras abreviadas («salimos en 305» por 305.000 €), y para eso el system prompt le dice al extractor cómo leer cifras abreviadas y que lleve a dudas lo que sea ambiguo por un error de transcripción. Las cifras llegan al modelo como números, que es lo que queremos para precios y plazos.
 
-En una sesión de Claude Code en la nube, el `fetch` de Node no usa el proxy del entorno por sí solo: ejecuta `NODE_USE_ENV_PROXY=1 npm run smoke:real -- --sin-app`. En un ordenador normal no hace falta.
+En una sesión de Claude Code en la nube, el `fetch` de Node no usa el proxy del entorno por sí solo: ejecuta `NODE_USE_ENV_PROXY=1 npm run smoke:real -- --sin-app`, y arranca la app con `NODE_USE_ENV_PROXY=1 npm run build && NODE_USE_ENV_PROXY=1 npm run start` antes de `NODE_USE_ENV_PROXY=1 npm run smoke:real`. En un ordenador normal no hace falta.
 
 ## Variables de entorno
 
@@ -122,7 +127,7 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 |---|---|
 | Comercial con prisa: subir y enviar un correo en < 3 min sin instrucciones | Diseñado para ello; falta la prueba con una persona real del sector. |
 | Cero campos obligatorios antes del resultado | Cumplido. Solo el campo opcional «¿De qué va?». |
-| < 2 min por hora de audio | Transcripción medida: 0,4 min por hora (ver «Última medida»). La extracción se mide con el mismo comando cuando haya `ANTHROPIC_API_KEY`. |
+| < 2 min por hora de audio | Por la app, 2 min 54 s de audio quedan listos en 16,6 s, de los que unos 12 s son fijos (crear, subir, sondear). Transcripción: 0,3–0,9 min por hora de audio. Falta sumar la extracción con Claude (ver «Última medida»). |
 | ≥ 80 % de tareas con responsable, ≥ 70 % de correos sin editar | Se mide (`edits_count`, `emails.sent_unchanged`); sin datos reales todavía. |
 | Cada tarea y decisión con cita y minuto, reproducible | Cumplido (con audio real). |
 | Móvil: grabar, subir y enviar sin pellizcar; Lighthouse ≥ 90 | Diseñado móvil primero; Lighthouse pendiente de medir en despliegue. |
@@ -133,6 +138,6 @@ Carpetas clave: `src/lib/ai` (motor), `src/lib/pipeline` (pasos), `src/lib/trans
 ## Pendiente
 
 - Vídeo de 20 segundos del flujo real en la landing (hoy hay tres pasos ilustrados) y frases de prueba social reales.
-- Ejecutar `npm run smoke:real -- --sin-app` con `ANTHROPIC_API_KEY` para medir la extracción (tiempo, coste, % de tareas con responsable), y `npm run smoke:real` por la app con un Supabase real; después ajustar `estimateProcessingSeconds` con las medidas.
+- Ejecutar los dos modos de `npm run smoke:real` con `ANTHROPIC_API_KEY` para medir la extracción con Claude (tiempo, coste, % de tareas con responsable). Con esa medida, ajustar `estimateProcessingSeconds` (hoy 25 s + 0,035 s por segundo de audio; para la reunión de ejemplo estima 31 s frente a 16,6 s reales sin Claude).
 - Reunión de ejemplo con grabación real.
 - Equipo e integraciones de calendario (solo .ics en v1).
